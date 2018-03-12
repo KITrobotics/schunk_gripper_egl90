@@ -15,6 +15,12 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _nh = ros::NodeHandle("~");
     std::string nodename = ros::this_node::getName();
 
+    std::string can_iface;
+    if (_nh.hasParam("can_iface"))
+        _nh.getParam("can_iface", can_iface);
+    else
+        can_iface = "can0";
+
     fillStrMaps();
     _srv_ack = _nh.advertiseService(nodename+"/acknowledge", &Egl90_can_node::acknowledge, this);
     _srv_reference = _nh.advertiseService(nodename+"/reference_motion", &Egl90_can_node::moveToReferencePos, this);
@@ -30,7 +36,7 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _can_id = 0x0500 + _module_adress; // 0x05 for master, module id 0xC = 12
     _can_module_id = 0x0700 + _module_adress; // 0x07 for slave, module id 0xC = 12
     _can_error_id = 0x300 + _module_adress; // 0x03 for warning/error, module id 0xC = 12
-    _can_socket_id = "can0"; // name within linux ifconfig
+    _can_socket_id = can_iface; // name within linux ifconfig
     _timeout_ms = 10000; //10s ??TODO!!
 
 
@@ -43,7 +49,7 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _respListener = _can_driver.createMsgListener(can::MsgHeader(_can_module_id), can::CommInterface::FrameDelegate(this, &Egl90_can_node::handleFrame_response));
     _errorListener = _can_driver.createMsgListener(can::MsgHeader(_can_error_id), can::CommInterface::FrameDelegate(this, &Egl90_can_node::handleFrame_error));
 
-     ROS_INFO("Can socket binding was successful!");
+     ROS_INFO("Can socket binding at %s was successful!", can_iface.c_str());
      std_srvs::Trigger::Request  req;
      std_srvs::Trigger::Response res;
      acknowledge(req, res);
