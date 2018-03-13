@@ -13,20 +13,22 @@
     <joint name="egl_position" type="prismatic">
       <parent link="${prefix}jaw_base"/>
       <child link="${prefix}finger_right"/>
-      <origin rpy="0.0 0.0 ${pi}" xyz="${x} -0.0255 -0.018"/>
+      <origin rpy="0.0 0.0 ${pi}" xyz="${x - 0.065} -0.013 -0.018"/>
       <axis xyz="1 0 0"/>
       <limit effort="100.0" lower="${min}" upper="${max}" velocity="100.0"/>
     </joint>
     <link name="${prefix}finger_right">
       <visual>
+        <origin xyz="0 0 0" rpy="${90 * PI / 180} 0 ${90 * PI / 180}"/>
         <geometry>
           <xacro:insert_block name="mesh"/>
         </geometry>
-        <material name="grey ">
-          <color rgba="0.5 0.5 0.5 1.0"/>
+        <material name="black ">
+          <color rgba="1.0 1.0 1.0 1.0"/>
         </material>
       </visual>
       <collision>
+        <origin xyz="0 0 0" rpy="${90 * PI / 180} 0 ${90 * PI / 180}"/>
         <geometry>
           <xacro:insert_block name="mesh"/>
         </geometry>
@@ -35,21 +37,23 @@
     <joint name="egl_position_mimic" type="prismatic">
       <parent link="${prefix}jaw_base"/>
       <child link="${prefix}finger_left"/>
-      <origin rpy="0.0 0.0 0.0" xyz="${x} 0.0255 -0.018"/>
+      <origin rpy="0.0 0.0 0.0" xyz="${x + 0.065} 0.013 -0.018"/>
       <axis xyz="1 0 0"/>
       <limit effort="100.0" lower="${min}" upper="${max}" velocity="100.0"/>
       <mimic joint="egl_position" multiplier="1"/>
     </joint>
     <link name="${prefix}finger_left">
       <visual>
+        <origin xyz="0 0 0" rpy="${90 * PI / 180} 0 ${90 * PI / 180}"/>
         <geometry>
           <xacro:insert_block name="mesh"/>
         </geometry>
-        <material name="grey ">
-          <color rgba="0.5 0.5 0.5 1.0"/>
+        <material name="black ">
+          <color rgba="1.0 1.0 1.0 1.0"/>
         </material>
       </visual>
       <collision>
+        <origin xyz="0 0 0" rpy="${90 * PI / 180} 0 ${90 * PI / 180}"/>
         <geometry>
           <xacro:insert_block name="mesh"/>
         </geometry>
