@@ -10,10 +10,10 @@
   <xacro:property name="jaw_base_z" value="0.0191"/>
   
   <xacro:macro name="egl90-jaws" params="prefix x min max *mesh">
-    <joint name="egl_position" type="prismatic">
+    <joint name="egl_position" type="fixed">
       <parent link="${prefix}jaw_base"/>
       <child link="${prefix}finger_right"/>
-      <origin rpy="0.0 0.0 ${pi}" xyz="${x - 0.065} -0.013 -0.018"/>
+      <origin rpy="0.0 0.0 ${pi}" xyz="${x - 0.1} -0.013 -0.018"/>
       <axis xyz="1 0 0"/>
       <limit effort="100.0" lower="${min}" upper="${max}" velocity="100.0"/>
     </joint>
@@ -34,10 +34,10 @@
         </geometry>
       </collision>
     </link>
-    <joint name="egl_position_mimic" type="prismatic">
+    <joint name="egl_position_mimic" type="fixed">
       <parent link="${prefix}jaw_base"/>
       <child link="${prefix}finger_left"/>
-      <origin rpy="0.0 0.0 0.0" xyz="${x + 0.065} 0.013 -0.018"/>
+      <origin rpy="0.0 0.0 0.0" xyz="${x + 0.1} 0.013 -0.018"/>
       <axis xyz="1 0 0"/>
       <limit effort="100.0" lower="${min}" upper="${max}" velocity="100.0"/>
       <mimic joint="egl_position" multiplier="1"/>
