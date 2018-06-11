@@ -140,8 +140,8 @@ private:
     ros::ServiceServer _srv_cleanUp;
 
     can::ThreadedSocketCANInterface _can_driver;
-    can::CommInterface::FrameListener::Ptr _respListener;
-    can::CommInterface::FrameListener::Ptr _errorListener;
+    can::CommInterface::FrameListener::ListenerConstSharedPtr _respListener;
+    can::CommInterface::FrameListener::ListenerConstSharedPtr _errorListener;
 
     unsigned int _module_adress;
     unsigned int _can_id;
