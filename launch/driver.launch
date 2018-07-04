@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="can_iface" default="can0" />
+
+  <node name="gripper_egl_90" pkg="schunk_gripper_egl90" type="schunk_gripper_egl90_node" output="screen">
+    <param name="can_iface" value="$(arg can_iface)"/>
+  </node>
+
+</launch>
