@@ -21,6 +21,11 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     else
         can_iface = "can0";
 
+    if (_nh.hasParam("joint_prefix"))
+        _nh.getParam("joint_prefix", joint_prefix);
+    else
+        joint_prefix = "";
+
     fillStrMaps();
     _srv_ack = _nh.advertiseService(nodename+"/acknowledge", &Egl90_can_node::acknowledge, this);
     _srv_reference = _nh.advertiseService(nodename+"/reference_motion", &Egl90_can_node::moveToReferencePos, this);
@@ -53,7 +58,7 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
      std_srvs::Trigger::Request  req;
      std_srvs::Trigger::Response res;
      acknowledge(req, res);
-     //updateState(0.04);
+     updateState(0.1);
 }
 
 void Egl90_can_node::restartCANInterface()
@@ -72,7 +77,7 @@ void Egl90_can_node::restartCANInterface()
 
 void Egl90_can_node::handleFrame_response(const can::Frame &f)
 {
-    ROS_INFO("Received msg CMD=%x, %s", f.data[1], _cmd_str[(CMD)f.data[1]].c_str());
+    ROS_DEBUG("Received msg CMD=%x, %s", f.data[1], _cmd_str[(CMD)f.data[1]].c_str());
     std::map<CMD, std::pair<int, STATUS_CMD> >::iterator search = _cmd_map.find((CMD)f.data[1]);
 
     if(search == _cmd_map.end()) // CMD not found in list, probably a spontanious msg
@@ -813,10 +818,18 @@ bool Egl90_can_node::publishState()
 {
     sensor_msgs::JointState js;
     js.header.stamp = ros::Time::now();
-    js.name.push_back("egl_position");
+    float position;
 
+    js.name.push_back(joint_prefix + "_egl_position_left");
     boost::mutex::scoped_lock lock(_statusMutex);
-    js.position.push_back(_status.status.position);
+    position = 0.055 - _status.status.position;
+    if (position < 0)
+      position = 0;
+    js.position.push_back(position);
+    js.velocity.push_back(_status.status.speed);
+    js.effort.push_back(_status.status.current);
+    js.name.push_back(joint_prefix + "_egl_position_right");
+    js.position.push_back(position);
     js.velocity.push_back(_status.status.speed);
     js.effort.push_back(_status.status.current);
     lock.unlock();

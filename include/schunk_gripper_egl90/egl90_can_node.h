@@ -127,6 +127,7 @@ private:
 
     static bool _shutdownSignal;
     ros::NodeHandle _nh;
+    std::string joint_prefix;
 
     boost::atomic<int> _cmdRetries;
 
