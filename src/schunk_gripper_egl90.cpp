@@ -42,7 +42,7 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _can_module_id = 0x0700 + _module_adress; // 0x07 for slave, module id 0xC = 12
     _can_error_id = 0x300 + _module_adress; // 0x03 for warning/error, module id 0xC = 12
     _can_socket_id = can_iface; // name within linux ifconfig
-    _timeout_ms = 10000; //10s ??TODO!!
+    _timeout_ms = 5000; //5s ??TODO!!
 
 
     if(!_can_driver.init(_can_socket_id, false)) // read own messages: false
@@ -678,6 +678,7 @@ bool Egl90_can_node::acknowledge(std_srvs::Trigger::Request &req, std_srvs::Trig
     bool error_flag = false;
     bool hasNoTimeout = false;
     bool cmdDone = false;
+    boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
 
     addState(CMD_ACK, PENDING);
     //_can_driver.send(can::toframe("50C#018B"));
@@ -693,17 +694,23 @@ bool Egl90_can_node::acknowledge(std_srvs::Trigger::Request &req, std_srvs::Trig
         if(_cmd_map.size() > 1){
             //there are other commands currently being executed
             boost::mutex::scoped_lock sendingLock(_gripperFinishedMutex);
-            _gripperFinished.wait(sendingLock);
+            ROS_INFO("CMD_ACK waiting before gripper finished...");
+            _gripperFinished.timed_wait(sendingLock, timeout);
         }
+        ROS_INFO("CMD_ACK after sending lock");
 
         if(_cmdRetries > MAX_CMD_RETRIES){
-            restartCANInterface();
+          ROS_ERROR("ack max retries");
+          _cmdRetries = 0;
+
+          res.success = false;
+          res.message = "Module did reply with error!";
+          return true;
         }
         _can_driver.send(txframe);
         ROS_INFO("CMD_ACK sent");
         _cmdMapLock.unlock();
 
-        boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
         boost::mutex::scoped_lock lock(_condition_mutex);
         do
         {
@@ -806,7 +813,7 @@ bool Egl90_can_node::cleanUp(std_srvs::Trigger::Request &req, std_srvs::Trigger:
     res.success = true;
     res.message = "ok";
 
-    ROS_WARN("Stoping the gripper and cleaning up all commands!");
+    ROS_WARN("Stopping the gripper and cleaning up all commands!");
     stop(req, res);
     boost::mutex::scoped_lock lock(_mutex);
     _cmd_map.clear();
@@ -851,6 +858,7 @@ bool Egl90_can_node::movePos(schunk_gripper_egl90::MovePos::Request &req, schunk
     txframe.dlc = 6;
     bool error_flag = false;
     bool hasNoTimeout = false;
+    boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
 
     addState(MOVE_POS, PENDING);
     do
@@ -866,17 +874,28 @@ bool Egl90_can_node::movePos(schunk_gripper_egl90::MovePos::Request &req, schunk
         if(_cmd_map.size() > 1){
             //there are other commands currently being executed
             boost::mutex::scoped_lock sendingLock(_gripperFinishedMutex);
-            _gripperFinished.wait(sendingLock);
+            _gripperFinished.timed_wait(sendingLock, timeout);
         }
 
         if(_cmdRetries > MAX_CMD_RETRIES){
-            restartCANInterface();
+          ROS_ERROR("move pos max retries, cleaning up");
+          _cmdRetries = 0;
+          _cmdMapLock.unlock();
+          std_srvs::Trigger::Request stop_req;
+          std_srvs::Trigger::Response stop_res;
+          stop(stop_req, stop_res);
+          boost::mutex::scoped_lock lock(_mutex);
+          _cmd_map.clear();
+          lock.unlock();
+
+          res.success = false;
+          res.message = "Module max retries!";
+          return true;
         }
         _can_driver.send(txframe);
         ROS_INFO("MOVE_POS sent");
         _cmdMapLock.unlock();
 
-        boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
         boost::mutex::scoped_lock lock(_condition_mutex);
         do
         {
@@ -940,6 +959,7 @@ bool Egl90_can_node::moveGrip(schunk_gripper_egl90::MoveGrip::Request &req, schu
      bool error_flag = false;
      bool hasNoTimeout = false;
      bool cmdDone = false;
+     boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
 
      addState(MOVE_VEL, PENDING);
      do
@@ -955,18 +975,29 @@ bool Egl90_can_node::moveGrip(schunk_gripper_egl90::MoveGrip::Request &req, schu
         if(_cmd_map.size() > 1){
             //there are other commands currently being executed
             boost::mutex::scoped_lock sendingLock(_gripperFinishedMutex);
-            _gripperFinished.wait(sendingLock);
+            _gripperFinished.timed_wait(sendingLock, timeout);
         }
 
         if(_cmdRetries > MAX_CMD_RETRIES){
-            restartCANInterface();
+          ROS_ERROR("move grip max retries, cleaning up");
+          _cmdRetries = 0;
+          _cmdMapLock.unlock();
+          std_srvs::Trigger::Request stop_req;
+          std_srvs::Trigger::Response stop_res;
+          stop(stop_req, stop_res);
+          boost::mutex::scoped_lock lock(_mutex);
+          _cmd_map.clear();
+          lock.unlock();
+
+          res.success = false;
+          res.message = "Module did reply with error!";
+          return true;
         }
         _can_driver.send(txframe1);
          _can_driver.send(txframe2);
         ROS_INFO("MOVE_VEL sent");
         _cmdMapLock.unlock();
 
-         boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
          boost::mutex::scoped_lock lock(_condition_mutex);
          do
          {
@@ -1077,10 +1108,12 @@ bool Egl90_can_node::isDone(CMD cmd, bool& error_flag)
                     }else{
                         ROS_INFO("The command %s was NOT removed from the map.", _cmd_str[cmd].c_str());
                     }
+                    ROS_INFO("error before all notified and done");
                     _gripperFinished.notify_all();
                     isDone = true;
                     _cmdRetries = 0;
-                	break;
+                    ROS_INFO("error all notified and done");
+                    break;
                 }
             case OK:
                 {
@@ -1091,10 +1124,12 @@ bool Egl90_can_node::isDone(CMD cmd, bool& error_flag)
                     }else{
                         ROS_INFO("The command %s was NOT removed from the map.", _cmd_str[cmd].c_str());
                     }
+                    ROS_INFO("ok before all notified and done");
                     _gripperFinished.notify_all();
                     isDone = true;
                     _cmdRetries = 0;
-                	break;
+                    ROS_INFO("ok all notified and done");
+                    break;
                 }
             default:
                 ROS_INFO("In Egl90_can_node::isDone(...): command %s has state %s", _cmd_str[cmd].c_str(), _status_cmd_str[(STATUS_CMD)_cmd_map[cmd].second].c_str());

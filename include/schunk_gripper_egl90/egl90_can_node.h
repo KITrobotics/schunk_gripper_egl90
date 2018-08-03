@@ -16,7 +16,7 @@
 #include <map>
 #include <utility>
 
-#define MAX_CMD_RETRIES 10 //TO DO: add as parameter
+#define MAX_CMD_RETRIES 15 //TO DO: add as parameter
 
 //Variables for converting float Data
 union fdata{
