@@ -27,12 +27,6 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
         joint_prefix = "";
 
     fillStrMaps();
-    _srv_ack = _nh.advertiseService(nodename+"/acknowledge", &Egl90_can_node::acknowledge, this);
-    _srv_reference = _nh.advertiseService(nodename+"/reference_motion", &Egl90_can_node::moveToReferencePos, this);
-    _srv_movePos = _nh.advertiseService(nodename+"/move_pos", &Egl90_can_node::movePos, this);
-    _srv_moveGrip = _nh.advertiseService(nodename+"/move_grip", &Egl90_can_node::moveGrip, this);
-    _srv_cleanUp = _nh.advertiseService(nodename+"/clean_up", &Egl90_can_node::cleanUp, this);
-    _srv_stop = _nh.advertiseService(nodename+"/stop", &Egl90_can_node::stop, this);
 
     _pub_joint_states = _nh.advertise<sensor_msgs::JointState>("joint_states", 1000);
 
@@ -59,6 +53,15 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
      std_srvs::Trigger::Response res;
      acknowledge(req, res);
      updateState(0.1);
+     moveToReferencePos(req, res);
+     acknowledge(req, res);
+
+    _srv_ack = _nh.advertiseService(nodename+"/acknowledge", &Egl90_can_node::acknowledge, this);
+    _srv_reference = _nh.advertiseService(nodename+"/reference_motion", &Egl90_can_node::moveToReferencePos, this);
+    _srv_movePos = _nh.advertiseService(nodename+"/move_pos", &Egl90_can_node::movePos, this);
+    _srv_moveGrip = _nh.advertiseService(nodename+"/move_grip", &Egl90_can_node::moveGrip, this);
+    _srv_cleanUp = _nh.advertiseService(nodename+"/clean_up", &Egl90_can_node::cleanUp, this);
+    _srv_stop = _nh.advertiseService(nodename+"/stop", &Egl90_can_node::stop, this);
 }
 
 void Egl90_can_node::restartCANInterface()
