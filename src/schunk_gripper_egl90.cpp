@@ -73,6 +73,13 @@ void Egl90_can_node::restartCANInterface()
     _respListener = _can_driver.createMsgListener(can::MsgHeader(_can_module_id), can::CommInterface::FrameDelegate(this, &Egl90_can_node::handleFrame_response));
     _errorListener = _can_driver.createMsgListener(can::MsgHeader(_can_error_id), can::CommInterface::FrameDelegate(this, &Egl90_can_node::handleFrame_error));  
 
+    ROS_INFO("Can socket binding was successful!");
+    std_srvs::Trigger::Request  req;
+    std_srvs::Trigger::Response res;
+    acknowledge(req, res);
+    updateState(0.1);
+    acknowledge(req, res);
+
     // 3rd solution to try is a full restart of the driver
     _cmdRetries = 0;
     ROS_INFO("Restart of socket can interface completed!");
@@ -759,6 +766,10 @@ bool Egl90_can_node::stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Re
 //    _can_driver.send(can::toframe("50C#0191"));
     do
     {
+        if(_cmdRetries > MAX_CMD_RETRIES){
+            restartCANInterface();
+        }
+
         ROS_INFO("Sending CMD_STOP message");
         if (getState(CMD_STOP) == CMD_NOT_FOUND)
         {
@@ -776,6 +787,8 @@ bool Egl90_can_node::stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Re
         }
         while (!_shutdownSignal && !isDone(CMD_STOP, error_flag) && hasNoTimeout);
         ROS_DEBUG("Wakeup and ok or timeout");
+
+        _cmdRetries++;
     }
     while (!hasNoTimeout);
 
