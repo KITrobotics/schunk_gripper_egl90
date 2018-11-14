@@ -36,7 +36,7 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _can_module_id = 0x0700 + _module_adress; // 0x07 for slave, module id 0xC = 12
     _can_error_id = 0x300 + _module_adress; // 0x03 for warning/error, module id 0xC = 12
     _can_socket_id = can_iface; // name within linux ifconfig
-    _timeout_ms = 5000; //5s ??TODO!!
+    _timeout_ms = 3000; //3s ??TODO!!
 
 
     if(!_can_driver.init(_can_socket_id, false)) // read own messages: false
@@ -621,6 +621,7 @@ bool Egl90_can_node::moveToReferencePos(std_srvs::Trigger::Request &req, std_srv
     txframe.data[0] = 1;
     txframe.data[1] = CMD_REFERENCE; //CMD Byte
     txframe.dlc = 2;
+    unsigned int timeout_reference = 15000; // 15s; referencing needs more time
     bool error_flag = false;
     bool hasNoTimeout = false;
 //    _can_driver.send(can::toframe("50C#0192"));
@@ -647,7 +648,7 @@ bool Egl90_can_node::moveToReferencePos(std_srvs::Trigger::Request &req, std_srv
         ROS_INFO("CMD_REFERENCE sent");
         _cmdMapLock.unlock();
 
-        boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
+        boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(timeout_reference);
         boost::mutex::scoped_lock lock(_condition_mutex);
         do
         {
