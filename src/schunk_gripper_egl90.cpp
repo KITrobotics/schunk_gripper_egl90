@@ -53,8 +53,6 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
      std_srvs::Trigger::Response res;
      acknowledge(req, res);
      updateState(0.1);
-     moveToReferencePos(req, res);
-     acknowledge(req, res);
 
     _srv_ack = _nh.advertiseService(nodename+"/acknowledge", &Egl90_can_node::acknowledge, this);
     _srv_reference = _nh.advertiseService(nodename+"/reference_motion", &Egl90_can_node::moveToReferencePos, this);
@@ -62,6 +60,8 @@ Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
     _srv_moveGrip = _nh.advertiseService(nodename+"/move_grip", &Egl90_can_node::moveGrip, this);
     _srv_cleanUp = _nh.advertiseService(nodename+"/clean_up", &Egl90_can_node::cleanUp, this);
     _srv_stop = _nh.advertiseService(nodename+"/stop", &Egl90_can_node::stop, this);
+
+    ROS_WARN("gripper may not be referenced, run 'rosservice call %s/reference_motion'", nodename.c_str());
 }
 
 void Egl90_can_node::restartCANInterface()
