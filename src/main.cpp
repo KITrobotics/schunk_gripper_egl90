@@ -6,7 +6,8 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "schunk_gripper_egl90_node");
 
   ROS_INFO("Starting EGL090 CAN Node.");
-  Egl90_can_node* node = new Egl90_can_node();
+  ros::NodeHandle nh = ros::NodeHandle("~");
+  Egl90_can_node* node = new Egl90_can_node(nh);
   ROS_INFO("EGL090 CAN Node running...");
 
   node->spin();

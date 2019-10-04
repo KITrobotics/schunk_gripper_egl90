@@ -1,18 +1,16 @@
 #include "schunk_gripper_egl90/egl90_can_node.h"
 
 #include <signal.h>
-#include <sensor_msgs/JointState.h>
 
 #include <socketcan_interface/string.h>
 
 bool Egl90_can_node::_shutdownSignal = false;
 
-Egl90_can_node::Egl90_can_node() : _cmdRetries(0)
+Egl90_can_node::Egl90_can_node(ros::NodeHandle _nh) : _cmdRetries(0)
 {
     //signal handler
     signal((int) SIGINT, Egl90_can_node::signalHandler);
 
-    _nh = ros::NodeHandle("~");
     std::string nodename = ros::this_node::getName();
 
     std::string can_iface;
@@ -258,22 +256,6 @@ void Egl90_can_node::handleFrame_response(const can::Frame &f)
                     search->second.second = RUNNING;
                     lock.unlock();
                 }
-                /*if (f.dlc >= 2 && f.data[2] == CMD_MOVE_BLOCKED)
-                {
-                    boost::mutex::scoped_lock lock(_mutex);
-                    search->second.second = ERROR;
-                    lock.unlock();
-                    _cond.notify_all();
-                }*/
-                /*if (f.dlc >= 2 && f.data[2] == CMD_POS_REACHED)
-                {
-
-                    boost::mutex::scoped_lock lock(_mutex);
-                    ROS_INFO("Changing the state of command %s from %s to %s", _cmd_str[(CMD)search->first].c_str(), _status_cmd_str[(STATUS_CMD)search->second.second].c_str(), _status_cmd_str[OK].c_str());
-                    search->second.second = OK;
-                    lock.unlock();
-                    _cond.notify_all();
-                }*/
                 break;
             case MOVE_VEL:
                 if (f.dlc >= 3 && f.data[2] == REPLY_OK_1 && f.data[3] == REPLY_OK_2)
@@ -284,14 +266,6 @@ void Egl90_can_node::handleFrame_response(const can::Frame &f)
                     search->second.second = RUNNING;
                     lock.unlock();
                 }
-                /*if (f.dlc >= 2 && f.data[2] == CMD_MOVE_BLOCKED)
-                {
-
-                    boost::mutex::scoped_lock lock(_mutex);
-                    search->second.second = OK;
-                    lock.unlock();
-                    //_cond.notify_all();
-                }*/
                 break;
             case MOVE_POS:
                 if (f.dlc >= 2 && f.data[2] == INFO_VALUE_LIMIT_MAX)
@@ -325,21 +299,6 @@ void Egl90_can_node::handleFrame_response(const can::Frame &f)
                     search->second.second = RUNNING;
                     lock.unlock();
                 }
-                /*if (f.dlc >= 2 && f.data[2] == CMD_MOVE_BLOCKED)
-                {
-
-                    boost::mutex::scoped_lock lock(_mutex);
-                    search->second.second = ERROR;
-                    lock.unlock();
-                    _cond.notify_all();
-                }
-                if (f.dlc >= 2 && f.data[2] == CMD_POS_REACHED)
-                {
-                    boost::mutex::scoped_lock lock(_mutex);
-                    search->second.second = OK;
-                    lock.unlock();
-                    _cond.notify_all();
-                }*/
                 break;
             case CMD_STOP:
                 if (f.dlc >= 3 && f.data[2] == REPLY_OK_1 && f.data[3] == REPLY_OK_2)
@@ -450,16 +409,6 @@ void Egl90_can_node::handleFrame_error(const can::Frame &f)
             }
             break;
     }
-
-//    ROS_WARN("For now just try acknoledging it!");
-//    std_srvs::Trigger::Request  req;
-//    std_srvs::Trigger::Response res;
-//    acknowledge(req, res);
-
-/*       std_srvs::Trigger::Request  req;
-       std_srvs::Trigger::Response res;
-       stop(req, res);*/
-//    ros::Duration(0.5).sleep();
 }
 
 bool Egl90_can_node::setState(Egl90_can_node::CMD command, Egl90_can_node::STATUS_CMD status)
@@ -497,16 +446,13 @@ bool Egl90_can_node::addState(Egl90_can_node::CMD command, Egl90_can_node::STATU
         // new creation
         _cmd_map[command] = std::make_pair(1, status);
         lock.unlock();
-        //_cond.notify_all();
     }
     else
     {
         boost::mutex::scoped_lock lock(_mutex);
-        // instance counter++
         _cmd_map[command].first++;
         _cmd_map[command].second = status;
         lock.unlock();
-        //_cond.notify_all();
     }
     return true;
 }
@@ -624,7 +570,6 @@ bool Egl90_can_node::moveToReferencePos(std_srvs::Trigger::Request &req, std_srv
     unsigned int timeout_reference = 15000; // 15s; referencing needs more time
     bool error_flag = false;
     bool hasNoTimeout = false;
-//    _can_driver.send(can::toframe("50C#0192"));
     addState(CMD_REFERENCE, PENDING);
     do
     {
@@ -692,7 +637,6 @@ bool Egl90_can_node::acknowledge(std_srvs::Trigger::Request &req, std_srvs::Trig
     boost::system_time const timeout=boost::get_system_time()+ boost::posix_time::milliseconds(_timeout_ms);
 
     addState(CMD_ACK, PENDING);
-    //_can_driver.send(can::toframe("50C#018B"));
     do
     {
         ROS_INFO("Sending CMD_ACK message");
@@ -764,7 +708,6 @@ bool Egl90_can_node::stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Re
     bool hasNoTimeout = false;
 
     addState(CMD_STOP, PENDING);
-//    _can_driver.send(can::toframe("50C#0191"));
     do
     {
         if(_cmdRetries > MAX_CMD_RETRIES){
@@ -806,6 +749,126 @@ bool Egl90_can_node::stop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Re
     return true;
 }
 
+void Egl90_can_node::gripperCmdAction(const control_msgs::GripperCommandGoalConstPtr& goal, GripperActionServer* as)
+{
+  control_msgs::GripperCommandResult result;
+  result.effort = 0.0;
+  result.stalled = static_cast<decltype(result.stalled)>(false);
+  sensor_msgs::JointState js;
+  float current_width;
+  bool action_success;
+
+  float target_width = goal->command.position;
+
+  constexpr double kSamePositionThreshold = 1e-4;
+  readState(js);
+  current_width = js.position[0];
+
+  ROS_INFO("got gripper action for target pos %f, current pos %f and max eff %f", target_width, current_width, goal->command.max_effort);
+
+  if (std::abs(target_width - current_width) < kSamePositionThreshold) {
+    ROS_INFO("no gripper action needed, already at position");
+    result.position = current_width;
+    result.reached_goal = static_cast<decltype(result.reached_goal)>(true);
+    as->setSucceeded(result);
+    return;
+  } else if (target_width < current_width) {
+    action_success = openGripperAction();
+  } else if (target_width > current_width) {
+    action_success = closeGripperAction();
+  }
+
+  readState(js);
+  result.position = js.position[0];
+  result.reached_goal = action_success;
+  as->setSucceeded(result);
+}
+
+bool Egl90_can_node::openGripperAction()
+{
+  schunk_gripper_egl90::MovePos::Request req;
+  schunk_gripper_egl90::MovePos::Response resp;
+  std_srvs::Trigger::Request  ack_req;
+  std_srvs::Trigger::Response ack_resp;
+
+  resp.success = false;
+  ack_resp.success = false;
+  int count = 0;
+  int ack_count = 0;
+  req.position = 68.0;
+
+  ROS_INFO("Opening the real gripper");
+
+  while (resp.success == false && count < 4)
+  {
+    movePos(req, resp);
+    if (resp.success == false)
+    {
+      while (ack_resp.success == false && ack_count < 3)
+      {
+        acknowledge(ack_req, ack_resp);
+        ack_count++;
+      }
+      if (ack_resp.success == false)
+      {
+        ROS_ERROR("gripper: failed to ack");
+        return false;
+      }
+    }
+    count++;
+  }
+
+  if (resp.success == false)
+  {
+    ROS_ERROR("failed to position gripper");
+    return false;
+  }
+
+  return true;
+}
+
+bool Egl90_can_node::closeGripperAction()
+{
+  schunk_gripper_egl90::MoveGrip::Request req;
+  schunk_gripper_egl90::MoveGrip::Response resp;
+  std_srvs::Trigger::Request  ack_req;
+  std_srvs::Trigger::Response ack_resp;
+
+  resp.success = false;
+  int count = 0;
+  req.speed = -60.0;
+  req.current = 0.45;
+
+  ROS_INFO("Closing the real gripper");
+
+  while (resp.success == false && count < 3)
+  {
+    moveGrip(req, resp);
+    if (resp.success == false)
+    {
+      acknowledge(ack_req, ack_resp);
+      if (ack_resp.success == false)
+      {
+        acknowledge(ack_req, ack_resp);
+        if (ack_resp.success == false)
+        {
+          ROS_ERROR("gripper: failed to ack");
+          return false;
+        }
+      }
+    }
+    count++;
+  }
+
+  if (resp.success == false)
+  {
+    ROS_ERROR("failed to grip with gripper");
+    return false;
+  }
+
+  return true;
+}
+
 void Egl90_can_node::updateState(float cycletime)
 {
     fdata updateTime;
@@ -820,7 +883,6 @@ void Egl90_can_node::updateState(float cycletime)
     txframe.data[6] = 0x07; //Send all information (0x01+0x02+0x04)  (Position, velocity and current)
     txframe.dlc = 7;
 
-//    _can_driver.send(can::toframe("50C#0195"));
     ROS_DEBUG("Sending getState message");
     _can_driver.send(txframe);
 }
@@ -838,9 +900,8 @@ bool Egl90_can_node::cleanUp(std_srvs::Trigger::Request &req, std_srvs::Trigger:
     return true;
 }
 
-bool Egl90_can_node::publishState()
+void Egl90_can_node::readState(sensor_msgs::JointState& js)
 {
-    sensor_msgs::JointState js;
     js.header.stamp = ros::Time::now();
     float position;
 
@@ -857,6 +918,12 @@ bool Egl90_can_node::publishState()
     js.velocity.push_back(_status.status.speed);
     js.effort.push_back(_status.status.current);
     lock.unlock();
+}
+
+bool Egl90_can_node::publishState()
+{
+    sensor_msgs::JointState js;
+    readState(js);
     _pub_joint_states.publish(js);
 }
 
@@ -945,8 +1012,8 @@ bool Egl90_can_node::movePos(schunk_gripper_egl90::MovePos::Request &req, schunk
 
 bool Egl90_can_node::moveGrip(schunk_gripper_egl90::MoveGrip::Request &req, schunk_gripper_egl90::MoveGrip::Response &res)
 {
-     ROS_INFO("move_grip seems not to be available in module 12, this is the alternative implementation using velocity cmd and underlying current control!");
-     ROS_WARN("The parameter you give in this command will be the default parameters for future move_pos commands!");
+     // move_grip seems not to be available in module 12, this is the alternative implementation using velocity cmd and underlying current control!
+     // The parameter you give in this command will be the default parameters for future move_pos commands!
 
      fdata vel, cur;
 
@@ -1027,7 +1094,6 @@ bool Egl90_can_node::moveGrip(schunk_gripper_egl90::MoveGrip::Request &req, schu
                 _cmdRetries++;
             }
             cmdDone = isDone(MOVE_VEL, error_flag);
-            //ROS_INFO("_shutdownSignal = %d, isDone = %d, hasNoTimeout = %d\n", _shutdownSignal, cmdDone, hasNoTimeout);
             std::cout<<"_shutdownSignal = "<<_shutdownSignal<<", isDone = "<<cmdDone<<", hasNoTimeout = "<<hasNoTimeout<<std::endl;
          }
          while (!_shutdownSignal && !cmdDone && hasNoTimeout);
@@ -1047,67 +1113,7 @@ bool Egl90_can_node::moveGrip(schunk_gripper_egl90::MoveGrip::Request &req, schu
      }
      return true;
 }
-     // --------------move grip --------------------------//
-/*     fdata cur;
-     cur.f = req.current;
-     bool error_flag = false;
 
-     struct can_frame txframe, rxframe;
-
-     txframe.can_id = _can_id;
-     txframe.can_dlc = 6;
-
-     txframe.data[0] = 5;
-     txframe.data[1] = 0xB7; // Move_grip seems to be not available in module 12
-
-     txframe.data[2] = cur.c[0];
-     txframe.data[3] = cur.c[1];
-     txframe.data[4] = cur.c[2];
-     txframe.data[5] = cur.c[3];
-
-     write(_can_socket, &txframe, sizeof(struct can_frame));
-     do
-     {
-         ros::Duration(0.1).sleep();
-         read(_can_socket, &rxframe, sizeof(struct can_frame));
-     } while (!isCanAnswer(0xB7, rxframe, error_flag) || _shutdownSignal);
-
-     if (error_flag)
-     {
-         res.success = false;
-         res.message = "Module did reply with error 0x02!";
-     }
-     else
-     {
-         do // wait for position reached signal
-         {
-             ros::Duration(0.1).sleep();
-             read(_can_socket, &rxframe, sizeof(struct can_frame));
-         } while ((rxframe.can_dlc < 2 && rxframe.data[2] != 0x93) || _shutdownSignal); // 0x93 is CMD_MOVE_BLOCKED
-
-         // TODO: timeout while reading socket
-         bool timeout = false;
-         if (timeout)
-         {
-             res.success = false;
-             res.message = "Module did not reply properly!";
-             return true;
-         }
-         else
-         {
-             res.success = true;
-             res.message = "Module reached position!";
-         }
-     }
-
-     return true;
-*/
-
-
-// IS DONE.
-/*
- * TODO
- */
 bool Egl90_can_node::isDone(CMD cmd, bool& error_flag)
 {
     bool isDone = false;
@@ -1155,9 +1161,7 @@ bool Egl90_can_node::isDone(CMD cmd, bool& error_flag)
     }
     else
     {
-        //ROS_ERROR("Waiting for an answer of a command, which cannot be found! %x, %s", cmd, _cmd_str[cmd].c_str());
         ROS_INFO("The command %s was removed from _cmd_map because it was not executed by the module!", _cmd_str[cmd].c_str());
-        //addState(cmd, RUNNING);
     }
     return isDone;
 }
@@ -1165,6 +1169,12 @@ bool Egl90_can_node::isDone(CMD cmd, bool& error_flag)
 void Egl90_can_node::spin()
 {
     ros::Rate rate(100);
+
+    std::string nodename = ros::this_node::getName();
+    Egl90_can_node::GripperActionServer action_srv_gripper_command(_nh, nodename+"/gripper_action",
+                                                                   boost::bind(&Egl90_can_node::gripperCmdAction, this, _1, &action_srv_gripper_command),
+                                                                   false);
+    action_srv_gripper_command.start();
 
     //wait for shutdown
     while(!_shutdownSignal && ros::ok())
@@ -1179,4 +1189,3 @@ void Egl90_can_node::signalHandler(int signal)
     ROS_INFO_NAMED("egl90_driver", "shutdown");
     _shutdownSignal = true;
 }
-

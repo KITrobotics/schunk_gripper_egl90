@@ -5,7 +5,10 @@
 #include <socketcan_interface/threading.h>
 
 #include <ros/ros.h>
+#include <actionlib/server/simple_action_server.h>
 
+#include <control_msgs/GripperCommandAction.h>
+#include <sensor_msgs/JointState.h>
 #include "std_srvs/Trigger.h"
 #include "schunk_gripper_egl90/MovePos.h"
 #include "schunk_gripper_egl90/MoveGrip.h"
@@ -118,11 +121,12 @@ class Egl90_can_node
     };
 
 public:
-    Egl90_can_node();
+    Egl90_can_node(ros::NodeHandle _nh);
     void spin();
 
     void updateState(float cycletime);
     void restartCANInterface();
+
 private:
 
     static bool _shutdownSignal;
@@ -196,8 +200,14 @@ private:
     bool moveGrip(schunk_gripper_egl90::MoveGrip::Request  &req,
                             schunk_gripper_egl90::MoveGrip::Response &res);
 
+    using GripperActionServer = actionlib::SimpleActionServer<control_msgs::GripperCommandAction>;
+    void gripperCmdAction(const control_msgs::GripperCommandGoalConstPtr& goal, GripperActionServer* as);
+    bool openGripperAction();
+    bool closeGripperAction();
+
     bool isDone(CMD cmd, bool& error_flag);
 
+    void readState(sensor_msgs::JointState& js);
     bool publishState();
 
     void handleFrame_response(const can::Frame &f);
